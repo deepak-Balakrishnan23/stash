@@ -1,0 +1,130 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   Stash — Content Script Overlay Styles
+   Floating toolbar shown during active recording
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#stash-toolbar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(13, 13, 11, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(42, 42, 36, 0.8);
+  border-radius: 12px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(232, 93, 4, 0.1);
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  opacity: 0;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  user-select: none;
+}
+
+#stash-toolbar.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+#stash-toolbar.dragging {
+  transition: none;
+  cursor: grabbing;
+}
+
+/* ─── Recording indicator ──────────────────────────────────────────── */
+
+.ll-rec-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c0392b;
+  flex-shrink: 0;
+  animation: ll-blink 1s ease-in-out infinite;
+}
+
+.ll-rec-dot.paused {
+  background: #e85d04;
+  animation: none;
+}
+
+@keyframes ll-blink {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px #c0392b; }
+  50% { opacity: 0.3; box-shadow: none; }
+}
+
+/* ─── Timer ────────────────────────────────────────────────────────── */
+
+.ll-timer {
+  font-size: 14px;
+  font-weight: 400;
+  color: #e8e6df;
+  letter-spacing: 0.04em;
+  min-width: 52px;
+  text-align: center;
+}
+
+/* ─── Divider ──────────────────────────────────────────────────────── */
+
+.ll-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(42, 42, 36, 0.8);
+  flex-shrink: 0;
+}
+
+/* ─── Control Buttons ──────────────────────────────────────────────── */
+
+.ll-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid rgba(42, 42, 36, 0.6);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: #9a9880;
+  padding: 0;
+}
+
+.ll-btn:hover {
+  background: rgba(26, 26, 22, 0.8);
+  border-color: rgba(58, 58, 48, 0.8);
+  color: #e8e6df;
+}
+
+.ll-btn.ll-stop {
+  border-color: rgba(192, 57, 43, 0.4);
+  color: #c0392b;
+}
+
+.ll-btn.ll-stop:hover {
+  background: rgba(192, 57, 43, 0.15);
+  border-color: #c0392b;
+}
+
+.ll-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ─── Brand Tag ────────────────────────────────────────────────────── */
+
+.ll-brand {
+  font-size: 9px;
+  font-weight: 500;
+  color: rgba(232, 93, 4, 0.6);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-left: 4px;
+}
