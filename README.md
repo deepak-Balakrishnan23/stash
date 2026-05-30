@@ -3,9 +3,6 @@
 **Record. Screenshot. Stash.**  
 A free, offline screen recorder that keeps everything on your device.
 
-[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/ehcljdhhbbchlcklpijonmkfpojdbmkh?label=Chrome%20Web%20Store&logo=google-chrome)](https://chromewebstore.google.com/detail/stash/ehcljdhhbbchlcklpijonmkfpojdbmkh)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
 ---
 
 ## What is Stash?
@@ -66,12 +63,8 @@ Stash is designed to keep your data on your device:
 
 - No analytics or tracking
 - No data sent to any server
-- Google Drive integration is opt-in only, and uses OAuth — no credentials are stored by the extension
+- Google Drive integration is opt-in only, and uses OAuth, no credentials are stored by the extension
 
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you'd like to change.
-
-## License
-
-[MIT](LICENSE)
