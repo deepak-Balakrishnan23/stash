@@ -20,7 +20,7 @@
   border-radius: 12px;
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(232, 93, 4, 0.1);
+    0 0 0 1px rgba(94, 110, 245, 0.18);
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
   opacity: 0;
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
@@ -121,10 +121,20 @@
 /* ─── Brand Tag ────────────────────────────────────────────────────── */
 
 .ll-brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 9px;
-  font-weight: 500;
-  color: rgba(232, 93, 4, 0.6);
-  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: #b9c0ff;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-left: 4px;
+  margin-left: 2px;
+}
+
+.ll-mark {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 5px rgba(94, 110, 245, 0.5));
 }

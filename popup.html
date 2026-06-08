@@ -1,111 +1,184 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=400"><title>Stash</title><link rel="stylesheet" href="popup.css"></head>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=400">
+  <title>Stash</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
 <body>
 <div id="app" role="application" aria-label="Stash">
 
   <header>
-    <div class="hdr-left">
-      <div class="logo-dot" aria-hidden="true"></div>
-      <span class="logo-text">Stash</span>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#stashG)"/><circle cx="12" cy="12" r="4.4" fill="#fff"/><defs><linearGradient id="stashG" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse"><stop stop-color="#6E56F0"/><stop offset="1" stop-color="#5B6EF5"/></linearGradient></defs></svg>
+      </span>
+      <span class="brand-name">Stash</span>
     </div>
-    <div class="hdr-right">
+    <div class="hdr-actions">
       <button class="icon-btn" id="btn-library" aria-label="Library" title="Library">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
       </button>
       <button class="icon-btn" id="btn-settings" aria-label="Settings" title="Settings">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
     </div>
   </header>
 
   <!-- MAIN -->
   <div id="view-main" class="view active">
-    <nav class="tab-bar" role="tablist">
-      <button class="tab active" id="tab-capture" role="tab" aria-selected="true" aria-controls="p-capture">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-        Capture
-      </button>
-      <button class="tab" id="tab-record" role="tab" aria-selected="false" aria-controls="p-record">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
-        Record
-      </button>
-    </nav>
 
-    <!-- CAPTURE -->
-    <div class="panel active" id="p-capture" role="tabpanel">
-      <div class="card-grid" role="group" aria-label="Screenshot modes">
-        <button class="mode-card" id="btn-ss-visible" aria-label="Visible part"><div class="card-icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div><span class="card-label">Visible Part</span></button>
-        <button class="mode-card" id="btn-ss-full" aria-label="Full page"><div class="card-icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="15" y2="10"/><line x1="9" y1="14" x2="13" y2="14"/></svg></div><span class="card-label">Full Page</span></button>
-        <button class="mode-card" id="btn-ss-area" aria-label="Selected area"><div class="card-icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></div><span class="card-label">Selected Area</span></button>
-      </div>
+    <!-- Hero / mode tabs -->
+    <div class="hero" role="tablist" aria-label="Mode">
+      <button class="hero-card rec active tab" id="tab-record" role="tab" aria-selected="true" aria-controls="p-record">
+        <span class="hero-glow" aria-hidden="true"></span>
+        <span class="hero-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 8a3 3 0 0 1 3-3h7a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z" fill="#fff"/><path d="M16 10.5l4.2-2.6a1 1 0 0 1 1.5.86v6.5a1 1 0 0 1-1.5.86L16 13.5z" fill="#fff"/></svg>
+        </span>
+        <span class="hero-title">Record</span>
+        <span class="hero-sub">Screen &amp; Tab</span>
+      </button>
+
+      <button class="hero-card snap tab" id="tab-capture" role="tab" aria-selected="false" aria-controls="p-capture">
+        <span class="hero-glow" aria-hidden="true"></span>
+        <span class="hero-corners" aria-hidden="true"></span>
+        <span class="hero-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1l.7-1.2A1.5 1.5 0 0 1 9.5 4h5a1.5 1.5 0 0 1 1.3.8L16.5 6h1A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5z" fill="#fff"/><circle cx="12" cy="12.5" r="3.2" fill="#EC4899"/></svg>
+        </span>
+        <span class="hero-title">Snap</span>
+        <span class="hero-sub">Screenshot</span>
+      </button>
     </div>
 
-    <!-- RECORD -->
-    <div class="panel" id="p-record" role="tabpanel">
+    <!-- RECORD PANEL -->
+    <div class="panel active" id="p-record" role="tabpanel">
+
       <div id="rec-status" class="rec-status hidden" role="status" aria-live="polite">
-        <div class="rec-ind"><div class="rec-dot" aria-hidden="true"></div><span class="rec-lbl">Recording</span></div>
+        <div class="rec-ind"><span class="rec-dot" aria-hidden="true"></span><span class="rec-lbl">Recording</span></div>
         <div class="rec-timer" id="rec-timer">00:00</div>
       </div>
 
-      <div class="card-grid" role="radiogroup" aria-label="Recording mode">
-        <button class="mode-card" data-mode="screen" role="radio" aria-checked="false" aria-label="Desktop"><div class="card-icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div><span class="card-label">Desktop</span></button>
-        <button class="mode-card active" data-mode="tab" role="radio" aria-checked="true" aria-label="This Tab"><div class="card-icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg></div><span class="card-label">This Tab</span></button>
-        <button class="mode-card" data-mode="camera" role="radio" aria-checked="false" aria-label="Camera only"><div class="card-icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div><span class="card-label">Camera</span></button>
+      <div class="seg" role="radiogroup" aria-label="Recording source" style="--seg-i:1">
+        <span class="seg-thumb" aria-hidden="true"></span>
+        <button class="seg-item mode-card" data-mode="screen" role="radio" aria-checked="false">Desktop</button>
+        <button class="seg-item mode-card active" data-mode="tab" role="radio" aria-checked="true">This Tab</button>
+        <button class="seg-item mode-card" data-mode="camera" role="radio" aria-checked="false">Camera</button>
       </div>
 
-      <div class="opts-bar" role="toolbar" aria-label="Options">
-        <button class="opt-btn" id="opt-mic" aria-label="Microphone" title="Microphone"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg></button>
-        <button class="opt-btn" id="opt-audio" aria-label="System audio" title="System Audio"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg></button>
-        <div class="opt-sep" aria-hidden="true"></div>
-        <button class="opt-sel" id="opt-format" aria-label="Format" aria-haspopup="listbox"><span id="lbl-format">WEBM</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
-        <button class="opt-sel" id="opt-res" aria-label="Resolution" aria-haspopup="listbox"><span id="lbl-res">1080p</span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></button>
-        <div class="opt-sep" aria-hidden="true"></div>
-        <button class="opt-sel" id="opt-save" aria-label="Save to" aria-haspopup="listbox">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          <span id="lbl-save">Local</span>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      <div class="field">
+        <button class="select" id="opt-save" aria-haspopup="listbox" aria-label="Save to">
+          <span class="select-lead">Save to</span>
+          <span class="select-val" id="lbl-save">Local</span>
+          <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="dd hidden" id="dd-save" role="listbox">
+          <button class="dd-item active" data-v="local" role="option">Local — Downloads</button>
+          <button class="dd-item" data-v="cloud" role="option">Google Drive</button>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <button class="select compact" id="opt-format" aria-haspopup="listbox" aria-label="Format">
+            <span class="select-val" id="lbl-format">MP4</span>
+            <svg class="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="dd hidden" id="dd-format" role="listbox">
+            <button class="dd-item active" data-v="mp4" role="option">MP4 — Universal</button>
+            <button class="dd-item" data-v="webm" role="option">WebM — Native</button>
+          </div>
+        </div>
+        <div class="field">
+          <button class="select compact" id="opt-res" aria-haspopup="listbox" aria-label="Quality">
+            <span class="select-val" id="lbl-res">1080p</span>
+            <svg class="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="dd hidden" id="dd-res" role="listbox">
+            <button class="dd-item active" data-v="1080p" role="option">1080p</button>
+            <button class="dd-item" data-v="720p" role="option">720p</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="toggles">
+        <button class="switch-pill" id="opt-mic" aria-label="Microphone" aria-pressed="true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+          <span class="switch-lbl">Mic</span>
+          <span class="switch" aria-hidden="true"><span class="knob"></span></span>
+        </button>
+        <button class="switch-pill" id="opt-audio" aria-label="System audio" aria-pressed="true">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+          <span class="switch-lbl">System</span>
+          <span class="switch" aria-hidden="true"><span class="knob"></span></span>
         </button>
       </div>
-
-      <!-- Dropdowns -->
-      <div class="dd hidden" id="dd-format" role="listbox"><button class="dd-item active" data-v="webm" role="option">.webm — Native</button><button class="dd-item" data-v="mp4" role="option">.mp4 — Universal</button><button class="dd-item" data-v="mp3" role="option">.mp3 — Audio only</button></div>
-      <div class="dd hidden" id="dd-res" role="listbox"><button class="dd-item active" data-v="1080p" role="option">1080p</button><button class="dd-item" data-v="720p" role="option">720p</button></div>
-      <div class="dd hidden" id="dd-save" role="listbox"><button class="dd-item active" data-v="local" role="option">Local (Downloads)</button><button class="dd-item" data-v="cloud" role="option">Google Drive</button></div>
 
       <div class="action-zone">
-        <button class="rec-btn" id="btn-record" aria-label="Start recording">
-          <div class="rec-btn-ring"><div class="rec-btn-dot" aria-hidden="true"></div></div>
+        <button class="primary" id="btn-record" aria-label="Start recording">
+          <span class="primary-dot" aria-hidden="true"></span>
+          <span id="rec-btn-label">Start Recording</span>
         </button>
-        <span class="rec-btn-label" id="rec-btn-label" aria-live="polite">Start Recording</span>
+        <div id="active-ctrls" class="active-ctrls hidden" role="toolbar" aria-label="Recording controls">
+          <button class="ctrl-btn" id="btn-pause" aria-label="Pause"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></button>
+          <button class="ctrl-btn danger" id="btn-stop" aria-label="Stop"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/></svg></button>
+        </div>
       </div>
+    </div>
 
-      <div id="active-ctrls" class="active-ctrls hidden" role="toolbar" aria-label="Recording controls">
-        <button class="ctrl-btn" id="btn-pause" aria-label="Pause"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></button>
-        <button class="ctrl-btn danger" id="btn-stop" aria-label="Stop"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/></svg></button>
-      </div>
+    <!-- CAPTURE PANEL -->
+    <div class="panel" id="p-capture" role="tabpanel">
+      <button class="shot-row" id="btn-ss-visible">
+        <span class="shot-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+        <span class="shot-txt"><span class="shot-title">Visible Area</span><span class="shot-sub">What you see right now</span></span>
+        <svg class="shot-go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+      <button class="shot-row" id="btn-ss-full">
+        <span class="shot-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="15" y2="10"/><line x1="9" y1="14" x2="13" y2="14"/></svg></span>
+        <span class="shot-txt"><span class="shot-title">Full Page</span><span class="shot-sub">Scroll &amp; stitch everything</span></span>
+        <svg class="shot-go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+      <button class="shot-row" id="btn-ss-area">
+        <span class="shot-ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg></span>
+        <span class="shot-txt"><span class="shot-title">Selected Region</span><span class="shot-sub">Drag to pick an area</span></span>
+        <svg class="shot-go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+      <p class="hint">Screenshots save straight to your Downloads.</p>
     </div>
   </div>
 
   <!-- LIBRARY -->
   <div id="view-library" class="view">
-    <div class="sub-hdr"><button class="back-btn" id="btn-back-lib" aria-label="Back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button><h2>Library</h2><span class="badge" id="rec-count">0</span></div>
+    <div class="sub-hdr">
+      <button class="back-btn" id="btn-back-lib" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <h2>Library</h2>
+      <span class="badge" id="rec-count">0</span>
+    </div>
     <div class="lib-list" id="lib-list" role="list">
-      <div class="empty" id="empty-state"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.25" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg><p>No recordings yet</p></div>
+      <div class="empty" id="empty-state">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.3" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+        <p>No recordings yet</p>
+      </div>
     </div>
   </div>
 
   <!-- SETTINGS -->
   <div id="view-settings" class="view">
-    <div class="sub-hdr"><button class="back-btn" id="btn-back-set" aria-label="Back"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button><h2>Settings</h2></div>
+    <div class="sub-hdr">
+      <button class="back-btn" id="btn-back-set" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <h2>Settings</h2>
+    </div>
     <div class="set-body">
       <div class="set-grp">
         <div class="set-lbl">Google Drive</div>
         <button class="text-btn" id="btn-drive-auth" aria-label="Connect Google Drive">Connect Google Drive</button>
-        <p class="set-hint">GCP Console → Create OAuth Client ID (Chrome Extension type) → paste Client ID in manifest.json → reload extension → add your email as Test User.</p>
+        <p class="set-hint">Optional. Connect to save recordings to a Stash folder in your Drive.</p>
       </div>
       <div class="set-div"></div>
-      <div class="set-grp"><div class="set-lbl">About</div><p class="set-hint">Stash v2.0 — Open Source · Free · Offline<br>Your recordings never leave your device.</p></div>
+      <div class="set-grp">
+        <div class="set-lbl">About</div>
+        <p class="set-hint">Stash v2.0.0 — Open Source · Free · Offline.<br>Your recordings never leave your device unless you choose Drive.</p>
+      </div>
     </div>
   </div>
 

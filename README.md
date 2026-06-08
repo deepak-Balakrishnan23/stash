@@ -35,16 +35,28 @@ Or load unpacked for development:
 
 ```
 stash/
-├── manifest.json          # Extension manifest (MV3)
-├── background.js          # Service worker — recording state & logic
-├── popup.html / popup.js  # Extension popup UI
-├── popup.css              # Popup styles
-├── content.js / .css      # Content script injected into pages
+├── manifest.json            # Extension manifest (MV3)
+├── background.js            # Service worker — state machine, message router, Drive
+├── db.js                    # Shared IndexedDB + codec layer (StashDB)
+├── popup.html / .js / .css  # Extension popup UI
+├── content.js / .css        # In-page recording toolbar (tab/screen)
+├── camera.html / .js / .css # Dedicated camera-recording window
 ├── offscreen/
-│   ├── offscreen.html     # Offscreen document host
-│   └── offscreen.js       # Media capture & processing
-└── icons/                 # Extension icons (16, 32, 48, 128px)
+│   ├── offscreen.html       # Offscreen document host (loads db.js)
+│   └── offscreen.js         # Tab/screen capture, encoding, screenshot stitching
+└── icons/                   # Extension icons (16, 32, 48, 128px)
 ```
+
+### How capture works
+
+- **This Tab / Desktop** — recorded in the offscreen document (`tabCapture` /
+  `getDisplayMedia`), streamed to IndexedDB, downloaded via an anchor click from
+  the persistent offscreen context.
+- **Camera** — opens a dedicated window (`camera.html`) with live preview and its
+  own controls. Works everywhere, including restricted pages where in-page
+  injection isn't allowed.
+- **Format** — MP4 (H.264/AAC) is the default and is recorded natively on modern
+  Chrome. Browsers without MP4 support fall back to WebM and show a notice.
 
 ## Permissions
 
@@ -52,10 +64,12 @@ stash/
 |---|---|
 | `tabCapture` | Capture the active tab's video/audio |
 | `storage` | Save settings and recordings locally |
-| `downloads` | Save files to your device |
-| `scripting` | Inject the recording toolbar into pages |
+| `downloads` | Save screenshots to your device |
+| `scripting` | In-page toolbar + screenshot selection overlays |
 | `offscreen` | Run media encoding in a background document |
-| `identity` | Optional Google Drive authentication |
+| `activeTab` | Capture the visible tab for screenshots |
+| `alarms` | Daily cleanup of old recordings |
+| `identity` *(optional)* | Requested only when you connect Google Drive |
 
 ## Privacy
 

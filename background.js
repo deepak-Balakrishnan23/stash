@@ -1,25 +1,30 @@
 /* ═══════════════════════════════════════════════════════════════
-   Stash v2 — Background Service Worker (Production)
+   Stash — Background Service Worker
    ═══════════════════════════════════════════════════════════════ */
 
 var STATE = {
   isRecording: false,
-  isPaused: false,
-  startTime: 0,
+  isPaused:    false,
+  isPending:   false,    // camera window opening, or recording handshake in flight
+  startTime:   0,
   pausedDuration: 0,
-  pauseStart: 0,
+  pauseStart:  0,
   recordingId: null,
   toolbarTabId: null,
-  mode: null, // 'screen' | 'tab' | 'camera' — tracks active recording type
+  cameraWindowId: null,
+  mode: null,            // 'screen' | 'tab' | 'camera'
   settings: {
     captureMode: 'tab',
     includeMic: true,
     includeSystemAudio: true,
     resolution: '1080p',
-    outputFormat: 'webm',
+    outputFormat: 'mp4',   // MP4 is the default output
     saveTo: 'local'
   }
 };
+
+var ALLOWED_FORMATS = ['mp4', 'webm'];
+var DRIVE_MIME = { mp4: 'video/mp4', webm: 'video/webm' };
 
 /* ── Offscreen Document ─────────────────────────────────────── */
 
@@ -30,32 +35,41 @@ async function ensureOffscreen() {
       documentUrls: [chrome.runtime.getURL('offscreen/offscreen.html')]
     });
     if (ctx.length > 0) return;
-  } else {
-    try {
-      await chrome.offscreen.createDocument({
-        url: 'offscreen/offscreen.html',
-        reasons: ['USER_MEDIA', 'DISPLAY_MEDIA', 'BLOBS'],
-        justification: 'Media recording and image processing'
-      });
-      return;
-    } catch (e) {
-      if (e.message && e.message.indexOf('single offscreen') !== -1) return;
-      throw e;
-    }
   }
-  await chrome.offscreen.createDocument({
-    url: 'offscreen/offscreen.html',
-    reasons: ['USER_MEDIA', 'DISPLAY_MEDIA', 'BLOBS'],
-    justification: 'Media recording and image processing'
+  try {
+    await chrome.offscreen.createDocument({
+      url: 'offscreen/offscreen.html',
+      reasons: ['USER_MEDIA', 'DISPLAY_MEDIA', 'BLOBS'],
+      justification: 'Media recording and image processing'
+    });
+  } catch (e) {
+    if (e.message && e.message.includes('single offscreen')) return; // race-safe
+    throw e;
+  }
+}
+
+function sendToOffscreen(msg) {
+  return new Promise(function(resolve) {
+    chrome.runtime.sendMessage(Object.assign({}, msg, { target: 'offscreen' }), function(res) {
+      resolve(chrome.runtime.lastError ? { error: chrome.runtime.lastError.message } : res);
+    });
   });
 }
 
 /* ── Settings ───────────────────────────────────────────────── */
 
 async function loadSettings() {
-  var data = await chrome.storage.local.get('settings');
+  var data = await chrome.storage.local.get(['settings', 'formatMigratedV2']);
   if (data.settings) Object.assign(STATE.settings, sanitizeSettings(data.settings));
-  if (STATE.settings.outputFormat === 'gif') STATE.settings.outputFormat = 'webm';
+
+  // One-time v2 migration: the old build defaulted to WebM and never offered a
+  // working MP4 path. Promote existing users to the new MP4 default once.
+  if (!data.formatMigratedV2) {
+    STATE.settings.outputFormat = 'mp4';
+    await chrome.storage.local.set({ settings: STATE.settings, formatMigratedV2: true });
+  }
+
+  if (ALLOWED_FORMATS.indexOf(STATE.settings.outputFormat) === -1) STATE.settings.outputFormat = 'mp4';
   if (!STATE.settings.saveTo) STATE.settings.saveTo = 'local';
   return STATE.settings;
 }
@@ -72,6 +86,7 @@ function sanitizeSettings(s) {
   ['captureMode', 'includeMic', 'includeSystemAudio', 'resolution', 'outputFormat', 'saveTo'].forEach(function(key) {
     if (Object.prototype.hasOwnProperty.call(s, key)) next[key] = s[key];
   });
+  if (next.outputFormat && ALLOWED_FORMATS.indexOf(next.outputFormat) === -1) next.outputFormat = 'mp4';
   return next;
 }
 
@@ -91,68 +106,42 @@ async function addRecording(meta) {
 async function deleteRecording(id) {
   var recs = (await getRecordings()).filter(function(r) { return r.id !== id; });
   await chrome.storage.local.set({ recordings: recs });
-  sendToOffscreen({ target: 'offscreen', type: 'DELETE_BLOB', recordingId: id });
+  try {
+    await ensureOffscreen();
+    await sendToOffscreen({ type: 'DELETE_BLOB', recordingId: id });
+  } catch (e) { /* non-fatal — cleaned up on next startup */ }
   return recs;
 }
 
-/* ── Offscreen Messaging ────────────────────────────────────── */
+/* ── Save / Download ────────────────────────────────────────── */
+//
+// All video downloads go through the offscreen document, which performs a
+// real anchor-click download from a persistent context. This avoids the
+// chrome.downloads + data:/blob: URL failures that previously produced the
+// "Check Internet connection" error and silently dropped files.
 
-function sendToOffscreen(msg) {
-  return new Promise(function(resolve) {
-    chrome.runtime.sendMessage(
-      Object.assign({}, msg, { target: 'offscreen' }),
-      function(res) { resolve(chrome.runtime.lastError ? { error: chrome.runtime.lastError.message } : res); }
-    );
-  });
-}
-
-/* ── Save File ──────────────────────────────────────────────── */
-
-async function saveFile(recordingId, filename, format) {
-  var mimeMap = { mp4: 'video/mp4', mp3: 'audio/mpeg', webm: 'video/webm', png: 'image/png' };
-  var mime = mimeMap[format] || 'application/octet-stream';
-  var safeName = filename.replace(/[<>:"\/\\|?*]/g, '_');
-
-  var blob = await sendToOffscreen({ target: 'offscreen', type: 'GET_BLOB_DATA', recordingId: recordingId });
-  if (!blob || !blob.base64) return { error: 'Data not found' };
+async function downloadRecording(recordingId, title, format) {
+  var fmt  = ALLOWED_FORMATS.indexOf(format) !== -1 ? format : 'webm';
+  var name = (title || 'recording').replace(/[<>:"\/\\|?*]/g, '_') + '.' + fmt;
 
   if (STATE.settings.saveTo === 'cloud') {
-    return await uploadToDrive(null, safeName + '.' + format, mime, blob.base64);
+    return await uploadToDrive(recordingId, name, DRIVE_MIME[fmt] || 'video/webm');
   }
-
   try {
-    await chrome.downloads.download({
-      url: 'data:' + mime + ';base64,' + blob.base64,
-      filename: 'Stash/' + safeName + '.' + format,
-      saveAs: true
-    });
+    await ensureOffscreen();
+    var r = await sendToOffscreen({ type: 'DOWNLOAD_FROM_IDB', recordingId: recordingId, filename: name });
+    if (r && r.error) return { error: r.error };
     return { success: true };
   } catch (e) {
     return { error: e.message };
   }
 }
 
-/* Save base64 data directly (for camera recordings that aren't in IndexedDB) */
-async function saveBase64(filename, format, base64) {
-  var mimeMap = { mp4: 'video/mp4', mp3: 'audio/mpeg', webm: 'video/webm' };
-  var mime = mimeMap[format] || 'video/webm';
-  var safeName = filename.replace(/[<>:"\/\\|?*]/g, '_');
-
-  if (STATE.settings.saveTo === 'cloud') {
-    return await uploadToDrive(null, safeName + '.' + format, mime, base64);
-  }
-
-  await chrome.downloads.download({
-    url: 'data:' + mime + ';base64,' + base64,
-    filename: 'Stash/' + safeName + '.' + format,
-    saveAs: true
-  });
-  return { success: true };
-}
-
-/* ── Google Drive ───────────────────────────────────────────── */
+/* ── Google Drive (optional) ────────────────────────────────── */
 
 async function getDriveToken() {
+  var has = await new Promise(function(res) { chrome.permissions.contains({ permissions: ['identity'] }, res); });
+  if (!has) throw new Error('Google Drive not connected — enable it in Settings first.');
   return new Promise(function(resolve, reject) {
     chrome.identity.getAuthToken({ interactive: true }, function(tok) {
       if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
@@ -161,20 +150,16 @@ async function getDriveToken() {
   });
 }
 
-async function uploadToDrive(recordingId, filename, mimeType, base64Data) {
+async function uploadToDrive(recordingId, filename, mimeType) {
   try {
     var token = await getDriveToken();
-    if (!base64Data && recordingId) {
-      var blob = await sendToOffscreen({ target: 'offscreen', type: 'GET_BLOB_DATA', recordingId: recordingId });
-      if (!blob || !blob.base64) throw new Error('No data');
-      base64Data = blob.base64;
-    }
-    if (!base64Data) throw new Error('No data to upload');
+    var blob  = await sendToOffscreen({ type: 'GET_BLOB_DATA', recordingId: recordingId });
+    if (!blob || !blob.base64) throw new Error('Recording data not found');
+    var base64Data = blob.base64;
 
     var searchRes = await fetch(
       "https://www.googleapis.com/drive/v3/files?q=name%3D'Stash'+and+mimeType%3D'application/vnd.google-apps.folder'+and+trashed%3Dfalse&fields=files(id)",
-      { headers: { Authorization: 'Bearer ' + token } }
-    );
+      { headers: { Authorization: 'Bearer ' + token } });
     if (!searchRes.ok) throw new Error('Failed to access Google Drive');
     var search = await searchRes.json();
     var folderId;
@@ -186,7 +171,7 @@ async function uploadToDrive(recordingId, filename, mimeType, base64Data) {
         headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'Stash', mimeType: 'application/vnd.google-apps.folder' })
       });
-      if (!cf.ok) throw new Error('Failed to create Stash folder in Google Drive');
+      if (!cf.ok) throw new Error('Failed to create Stash folder in Drive');
       folderId = (await cf.json()).id;
     }
 
@@ -196,11 +181,9 @@ async function uploadToDrive(recordingId, filename, mimeType, base64Data) {
       '\r\n--' + boundary + '\r\nContent-Type: ' + mimeType + '\r\nContent-Transfer-Encoding: base64\r\n\r\n' +
       base64Data + '\r\n--' + boundary + '--';
 
-    var up = await fetch(
-      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',
-      { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'multipart/related; boundary=' + boundary }, body: body }
-    );
-    if (!up.ok) throw new Error('Upload to Google Drive failed');
+    var up = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink',
+      { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'multipart/related; boundary=' + boundary }, body: body });
+    if (!up.ok) throw new Error('Upload to Drive failed');
     return { success: true, file: await up.json() };
   } catch (e) {
     return { success: false, error: e.message };
@@ -210,55 +193,110 @@ async function uploadToDrive(recordingId, filename, mimeType, base64Data) {
 /* ── State Helpers ──────────────────────────────────────────── */
 
 function resetState() {
-  STATE.isRecording = false;
-  STATE.isPaused = false;
-  STATE.startTime = 0;
-  STATE.pausedDuration = 0;
-  STATE.pauseStart = 0;
-  STATE.recordingId = null;
-  STATE.toolbarTabId = null;
+  STATE.isRecording = false; STATE.isPaused = false; STATE.isPending = false;
+  STATE.startTime = 0; STATE.pausedDuration = 0; STATE.pauseStart = 0;
+  STATE.recordingId = null; STATE.toolbarTabId = null; STATE.cameraWindowId = null;
   STATE.mode = null;
   chrome.action.setBadgeText({ text: '' });
+  clearRecLimit();
+}
+
+function getElapsed() {
+  if (!STATE.isRecording) return 0;
+  var e = Date.now() - STATE.startTime - STATE.pausedDuration;
+  if (STATE.isPaused) e -= (Date.now() - STATE.pauseStart);
+  return Math.max(0, e);
+}
+
+/* Stop the active tab/screen recording, save it, and reset. Reused by the
+   STOP_RECORDING message and the long-recording notification. */
+async function stopTabScreen() {
+  if (!STATE.isRecording || STATE.mode === 'camera') return { error: 'Not recording' };
+  var dur = getElapsed();
+  var sr  = await sendToOffscreen({ type: 'STOP_RECORDING', recordingId: STATE.recordingId });
+  if (!sr || sr.error) return { error: (sr && sr.error) || 'Failed to stop recording' };
+
+  var saveTo = STATE.settings.saveTo;
+  var meta = {
+    id: STATE.recordingId, title: 'Recording ' + new Date().toLocaleString(),
+    duration: dur, format: sr.actualFormat || STATE.settings.outputFormat,
+    timestamp: Date.now(), size: sr.size || 0
+  };
+  var toolbarTabId = STATE.toolbarTabId;
+  await addRecording(meta);
+  if (toolbarTabId) chrome.tabs.sendMessage(toolbarTabId, { type: 'HIDE_TOOLBAR' }).catch(function() {});
+  resetState();
+  broadcastState();
+
+  var saveResult = await downloadRecording(meta.id, meta.title, meta.format);
+  if (saveResult && saveResult.error) return { error: saveResult.error, recording: meta, warning: sr.warning || null };
+  return { success: true, recording: meta, warning: sr.warning || null, saveTo: saveTo };
+}
+
+/* ── Long-recording check-in ────────────────────────────────── */
+var REC_LIMIT_NOTIF = 'stash-rec-limit';
+
+function armRecLimitAlarm() {
+  // Fire at 10 min, then every 10 min, so the user is never recording
+  // unknowingly for a long time.
+  chrome.alarms.create('recLimit', { delayInMinutes: 10, periodInMinutes: 10 });
+}
+function clearRecLimit() {
+  chrome.alarms.clear('recLimit');
+  chrome.notifications.clear(REC_LIMIT_NOTIF);
+}
+
+function warnLongRecording() {
+  if (!STATE.isRecording) { clearRecLimit(); return; }
+  var mins = Math.max(1, Math.round(getElapsed() / 60000));
+  chrome.notifications.create(REC_LIMIT_NOTIF, {
+    type: 'basic',
+    iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+    title: 'Stash is still recording',
+    message: 'You’ve been recording for about ' + mins + ' minutes. Keep going?',
+    buttons: [{ title: 'Keep Recording' }, { title: 'Stop & Save' }],
+    requireInteraction: true,
+    priority: 2
+  });
+}
+
+async function stopFromNotification() {
+  if (!STATE.isRecording) return;
+  if (STATE.mode === 'camera') {
+    // The camera window owns its recorder — ask it to stop & save
+    chrome.runtime.sendMessage({ type: 'CAMERA_STOP_REQUEST' }).catch(function() {});
+  } else {
+    await stopTabScreen();
+  }
 }
 
 function broadcastState() {
-  var elapsed = 0;
-  if (STATE.isRecording) {
-    elapsed = Date.now() - STATE.startTime - STATE.pausedDuration;
-    if (STATE.isPaused) elapsed -= (Date.now() - STATE.pauseStart);
-  }
   var message = {
     target: 'popup', type: 'STATE_UPDATE',
-    isRecording: STATE.isRecording, isPaused: STATE.isPaused, elapsed: elapsed,
-    mode: STATE.mode
+    isRecording: STATE.isRecording, isPaused: STATE.isPaused,
+    elapsed: getElapsed(), mode: STATE.mode
   };
   chrome.runtime.sendMessage(message).catch(function() {});
-  if (STATE.toolbarTabId) {
-    chrome.tabs.sendMessage(STATE.toolbarTabId, message).catch(function() {});
-  }
+  if (STATE.toolbarTabId) chrome.tabs.sendMessage(STATE.toolbarTabId, message).catch(function() {});
 }
 
 /* ── Message Router ─────────────────────────────────────────── */
 
 chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
   if (msg.target === 'offscreen') return false;
-  handleMessage(msg).then(sendResponse).catch(function(e) { sendResponse({ error: e.message }); });
+  handleMessage(msg, sender).then(sendResponse).catch(function(e) { sendResponse({ error: e.message }); });
   return true;
 });
 
-async function handleMessage(msg) {
+async function handleMessage(msg, sender) {
   switch (msg.type) {
 
   case 'GET_STATE':
     await loadSettings();
-    var el = 0;
-    if (STATE.isRecording) {
-      el = Date.now() - STATE.startTime - STATE.pausedDuration;
-      if (STATE.isPaused) el -= (Date.now() - STATE.pauseStart);
-    }
-    return { isRecording: STATE.isRecording, isPaused: STATE.isPaused, settings: STATE.settings,
-             elapsed: el, startTime: STATE.startTime, pausedDuration: STATE.pausedDuration,
-             pauseStart: STATE.pauseStart, mode: STATE.mode };
+    return {
+      isRecording: STATE.isRecording, isPaused: STATE.isPaused, settings: STATE.settings,
+      elapsed: getElapsed(), mode: STATE.mode
+    };
 
   case 'UPDATE_SETTINGS':
     return await saveSettings(msg.settings);
@@ -270,271 +308,116 @@ async function handleMessage(msg) {
   /* ══ Recording ══════════════════════════════════════════════ */
 
   case 'START_RECORDING': {
-    if (STATE.isRecording) return { error: 'Already recording' };
+    if (STATE.isRecording || STATE.isPending) return { error: 'Already recording' };
     await loadSettings();
+    STATE.recordingId = 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
 
-    STATE.recordingId = 'rec_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-
-    /* ── Camera mode: inject overlay into tab ─────────────── */
+    /* ── Camera → dedicated window ────────────────────────── */
     if (STATE.settings.captureMode === 'camera') {
-      var camTab = (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
-      if (!camTab || !camTab.id) return { error: 'No active tab' };
-
       STATE.mode = 'camera';
-      STATE.toolbarTabId = camTab.id;
-
-      await chrome.scripting.executeScript({
-        target: { tabId: camTab.id },
-        args: [STATE.settings.includeMic],
-        func: function(includeMic) {
-          if (document.getElementById('stash-cam-overlay')) return;
-          var ov = document.createElement('div');
-          ov.id = 'stash-cam-overlay';
-          ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:-apple-system,sans-serif;';
-
-          var vid = document.createElement('video');
-          vid.autoplay=true; vid.muted=true; vid.playsInline=true;
-          vid.style.cssText = 'width:540px;height:400px;border-radius:12px;object-fit:cover;transform:scaleX(-1);background:#000;border:2px solid #2e2e26;';
-          ov.appendChild(vid);
-
-          var bar = document.createElement('div');
-          bar.style.cssText = 'display:flex;align-items:center;gap:16px;margin-top:16px;';
-          var st = document.createElement('span');
-          st.textContent = 'Requesting camera...';
-          st.style.cssText = 'font-size:12px;color:#9a9880;min-width:100px;text-align:center;font-family:monospace;';
-          var rb = document.createElement('button');
-          rb.style.cssText = 'width:52px;height:52px;border-radius:50%;border:2px solid #3e3e34;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .25s;opacity:0.3;pointer-events:none;';
-          var dt = document.createElement('div');
-          dt.style.cssText = 'width:22px;height:22px;border-radius:50%;background:#e85d04;transition:all .3s;';
-          rb.appendChild(dt);
-          var tm = document.createElement('span');
-          tm.textContent='00:00';
-          tm.style.cssText = 'font-size:16px;color:#ededed;min-width:60px;text-align:center;font-family:monospace;font-weight:300;';
-          var cb = document.createElement('button');
-          cb.textContent='\u2715';
-          cb.style.cssText = 'position:absolute;top:16px;right:20px;width:36px;height:36px;border-radius:50%;border:1px solid #3e3e34;background:rgba(0,0,0,0.5);color:#ededed;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;';
-          bar.appendChild(st); bar.appendChild(rb); bar.appendChild(tm);
-          ov.appendChild(bar); ov.appendChild(cb);
-          document.body.appendChild(ov);
-
-          var stream=null,rec=null,chunks=[],on=false,t0=0,iv=null;
-          function die(){clearInterval(iv);if(stream)stream.getTracks().forEach(function(t){t.stop();});if(ov.parentNode)ov.parentNode.removeChild(ov);}
-
-          cb.onclick=function(){if(on&&rec){rec.stop();}else{chrome.runtime.sendMessage({type:'CAMERA_CLOSED'});die();}};
-
-          navigator.mediaDevices.getUserMedia({video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30}},audio:includeMic})
-          .then(function(s){
-            stream=s; vid.srcObject=s;
-            st.textContent='READY'; st.style.color='#4a9c6d';
-            rb.style.opacity='1'; rb.style.pointerEvents='auto';
-            chrome.runtime.sendMessage({type:'CAMERA_READY'});
-
-            rb.onclick=function(){
-              if(on){
-                rec.stop(); on=false;
-                dt.style.cssText='width:22px;height:22px;border-radius:50%;background:#e85d04;transition:all .3s;';
-                rb.style.borderColor='#3e3e34';
-                st.textContent='SAVING...'; st.style.color='#9a9880';
-                clearInterval(iv);
-              } else {
-                chunks=[];
-                var mime=MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')?'video/webm;codecs=vp9,opus':'video/webm;codecs=vp8,opus';
-                rec=new MediaRecorder(s,{mimeType:mime,videoBitsPerSecond:2500000});
-                rec.ondataavailable=function(e){if(e.data&&e.data.size>0)chunks.push(e.data);};
-                rec.onstop=function(){
-                  var blob=new Blob(chunks,{type:'video/webm'});
-                  var rd=new FileReader();
-                  rd.onloadend=function(){
-                    chrome.runtime.sendMessage({type:'CAMERA_RECORDING_DONE',base64:rd.result.split(',')[1],duration:Date.now()-t0,size:blob.size});
-                    st.textContent='SAVED'; st.style.color='#4a9c6d';
-                    setTimeout(die,1200);
-                  };
-                  rd.readAsDataURL(blob);
-                };
-                rec.start(1000); on=true; t0=Date.now();
-                chrome.runtime.sendMessage({type:'CAMERA_RECORDING_STARTED'});
-                dt.style.cssText='width:16px;height:16px;border-radius:3px;background:#d44333;transition:all .3s;';
-                rb.style.borderColor='#d44333';
-                st.textContent='REC'; st.style.color='#d44333';
-                iv=setInterval(function(){var sec=Math.floor((Date.now()-t0)/1000);tm.textContent=String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0');},250);
-              }
-            };
-          })
-          .catch(function(err){
-            st.textContent='Camera permission denied'; st.style.color='#d44333'; vid.style.display='none';
-            var em=document.createElement('div');
-            em.style.cssText='color:#d44333;font-size:14px;text-align:center;max-width:320px;line-height:1.6;margin-bottom:16px;';
-            em.innerHTML='Camera access was blocked.<br><span style="font-size:11px;color:#706e58;">Allow camera in browser settings and try again.</span>';
-            ov.insertBefore(em,bar);
-            chrome.runtime.sendMessage({type:'CAMERA_FAILED',error:err.message||'Permission denied'});
-            setTimeout(die,4000);
-          });
-
-          document.addEventListener('keydown',function esc(e){
-            if(e.key==='Escape'){if(on&&rec)rec.stop();else{chrome.runtime.sendMessage({type:'CAMERA_CLOSED'});die();}document.removeEventListener('keydown',esc);}
-          });
-        }
+      STATE.isPending = true;
+      var win = await chrome.windows.create({
+        url: chrome.runtime.getURL('camera.html'),
+        type: 'popup', width: 760, height: 680, focused: true
       });
-
-      // Don't set isRecording until the overlay actually starts recording
-      return { success: true, pending: true };
+      STATE.cameraWindowId = win.id;
+      return { success: true, pending: true, camera: true };
     }
 
-    /* ── Screen/Tab mode: use offscreen ───────────────────── */
-    STATE.mode = STATE.settings.captureMode; // 'screen' or 'tab'
+    /* ── Tab / Screen → offscreen ─────────────────────────── */
+    STATE.mode = STATE.settings.captureMode; // 'screen' | 'tab'
     await ensureOffscreen();
+    STATE.startTime = Date.now(); STATE.pausedDuration = 0; STATE.pauseStart = 0;
 
-    STATE.startTime = Date.now();
-    STATE.pausedDuration = 0;
-    STATE.pauseStart = 0;
-
-    var streamId = null;
+    var streamId  = null;
     var targetTab = (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
     STATE.toolbarTabId = targetTab && targetTab.id ? targetTab.id : null;
-    if (STATE.settings.captureMode === 'tab') {
-      if (targetTab) {
-        streamId = await new Promise(function(res, rej) {
-          chrome.tabCapture.getMediaStreamId({ targetTabId: targetTab.id }, function(id) {
-            if (chrome.runtime.lastError) rej(new Error(chrome.runtime.lastError.message)); else res(id);
-          });
+
+    if (STATE.settings.captureMode === 'tab' && targetTab) {
+      streamId = await new Promise(function(res, rej) {
+        chrome.tabCapture.getMediaStreamId({ targetTabId: targetTab.id }, function(id) {
+          if (chrome.runtime.lastError) rej(new Error(chrome.runtime.lastError.message)); else res(id);
         });
-      }
+      });
     }
 
-    var r = await sendToOffscreen({
-      target: 'offscreen', type: 'START_RECORDING',
-      settings: STATE.settings, recordingId: STATE.recordingId, streamId: streamId
-    });
-
+    var r = await sendToOffscreen({ type: 'START_RECORDING', settings: STATE.settings, recordingId: STATE.recordingId, streamId: streamId });
     if (r && r.error) { STATE.recordingId = null; STATE.mode = null; return { error: r.error }; }
 
-    STATE.isRecording = true;
-    STATE.isPaused = false;
+    STATE.isRecording = true; STATE.isPaused = false;
     chrome.action.setBadgeText({ text: 'REC' });
     chrome.action.setBadgeBackgroundColor({ color: '#e85d04' });
+    armRecLimitAlarm();
     broadcastState();
+    if (STATE.toolbarTabId) chrome.tabs.sendMessage(STATE.toolbarTabId, { type: 'SHOW_TOOLBAR', elapsed: 0 }).catch(function() {});
 
-    if (STATE.toolbarTabId) chrome.tabs.sendMessage(STATE.toolbarTabId, { type: 'SHOW_TOOLBAR' }).catch(function() {});
-    return {
-      success: true,
-      recordingId: STATE.recordingId,
-      mode: STATE.mode,
-      elapsed: 0,
-      actualFormat: r.actualFormat || STATE.settings.outputFormat,
-      warning: r.warning || null
-    };
+    return { success: true, recordingId: STATE.recordingId, mode: STATE.mode, elapsed: 0,
+             actualFormat: r.actualFormat || STATE.settings.outputFormat, warning: r.warning || null };
   }
 
-  /* ── Camera lifecycle messages (from injected script) ───── */
+  /* ── Camera window lifecycle ────────────────────────────── */
 
-  case 'CAMERA_READY':
-    return { success: true };
+  case 'CAMERA_INIT':   // camera.html requesting its reserved id + settings
+    return { recordingId: STATE.recordingId || ('cam_' + Date.now()), settings: STATE.settings };
 
-  case 'CAMERA_RECORDING_STARTED':
-    STATE.isRecording = true;
-    STATE.isPaused = false;
-    STATE.startTime = Date.now();
-    STATE.pausedDuration = 0;
-    STATE.pauseStart = 0;
+  case 'CAMERA_STARTED':
+    STATE.isRecording = true; STATE.isPaused = false; STATE.isPending = false;
+    STATE.startTime = Date.now(); STATE.pausedDuration = 0; STATE.pauseStart = 0;
     chrome.action.setBadgeText({ text: 'CAM' });
     chrome.action.setBadgeBackgroundColor({ color: '#e85d04' });
+    armRecLimitAlarm();
     broadcastState();
     return { success: true };
 
-  case 'CAMERA_FAILED':
-    resetState();
-    broadcastState();
-    return { error: msg.error || 'Camera permission denied' };
-
-  case 'CAMERA_CLOSED':
+  case 'CAMERA_STOPPED':
+  case 'CAMERA_CANCELLED':
     resetState();
     broadcastState();
     return { success: true };
 
-  case 'CAMERA_RECORDING_DONE': {
-    var camTitle = 'Camera ' + new Date().toLocaleString();
-    var camMeta = {
-      id: STATE.recordingId || ('cam_' + Date.now()),
-      title: camTitle,
-      duration: msg.duration || 0,
-      format: msg.actualFormat || 'webm',
-      timestamp: Date.now(),
-      size: msg.size || 0
-    };
-    await addRecording(camMeta);
-    resetState();
-    broadcastState();
-
-    if (msg.base64) {
-      await saveBase64(camTitle, 'webm', msg.base64);
+  case 'FOCUS_CAMERA':
+    if (STATE.cameraWindowId != null) {
+      try { await chrome.windows.update(STATE.cameraWindowId, { focused: true }); } catch (e) {}
     }
     return { success: true };
-  }
 
-  /* ── Pause / Resume (screen/tab only — camera has own UI) ─ */
+  /* ── Pause / Resume (tab/screen) ────────────────────────── */
 
   case 'PAUSE_RECORDING':
-    if (!STATE.isRecording || STATE.isPaused) return { success: false };
-    if (STATE.mode === 'camera') return { success: false }; // camera handles its own pause
-    STATE.isPaused = true;
-    STATE.pauseStart = Date.now();
-    await sendToOffscreen({ target: 'offscreen', type: 'PAUSE_RECORDING' });
-    chrome.action.setBadgeText({ text: '||' });
+    if (!STATE.isRecording || STATE.isPaused || STATE.mode === 'camera') return { success: false };
+    STATE.isPaused = true; STATE.pauseStart = Date.now();
+    await sendToOffscreen({ type: 'PAUSE_RECORDING' });
+    chrome.action.setBadgeText({ text: '❚❚' });
     broadcastState();
     return { success: true };
 
   case 'RESUME_RECORDING':
-    if (!STATE.isRecording || !STATE.isPaused) return { success: false };
-    if (STATE.mode === 'camera') return { success: false };
+    if (!STATE.isRecording || !STATE.isPaused || STATE.mode === 'camera') return { success: false };
     STATE.pausedDuration += Date.now() - STATE.pauseStart;
-    STATE.isPaused = false;
-    STATE.pauseStart = 0;
-    await sendToOffscreen({ target: 'offscreen', type: 'RESUME_RECORDING' });
+    STATE.isPaused = false; STATE.pauseStart = 0;
+    await sendToOffscreen({ type: 'RESUME_RECORDING' });
     chrome.action.setBadgeText({ text: 'REC' });
     broadcastState();
     return { success: true };
 
-  /* ── Stop (screen/tab only — camera stops via own UI) ───── */
+  /* ── Stop (tab/screen) ──────────────────────────────────── */
 
   case 'STOP_RECORDING': {
     if (!STATE.isRecording) return { error: 'Not recording' };
-    if (STATE.mode === 'camera') return { error: 'Use camera overlay to stop' };
-
-    var dur = Date.now() - STATE.startTime - STATE.pausedDuration;
-    var sr = await sendToOffscreen({ target: 'offscreen', type: 'STOP_RECORDING', recordingId: STATE.recordingId });
-    if (!sr || sr.error) return { error: (sr && sr.error) || 'Failed to stop recording' };
-
-    var meta = {
-      id: STATE.recordingId,
-      title: 'Recording ' + new Date().toLocaleString(),
-      duration: dur,
-      format: sr.actualFormat || STATE.settings.outputFormat,
-      timestamp: Date.now(),
-      size: sr ? (sr.size || 0) : 0
-    };
-    var toolbarTabId = STATE.toolbarTabId;
-    await addRecording(meta);
-    if (toolbarTabId) chrome.tabs.sendMessage(toolbarTabId, { type: 'HIDE_TOOLBAR' }).catch(function() {});
-    resetState();
-    broadcastState();
-
-    var saveResult = await saveFile(meta.id, meta.title, meta.format);
-    if (saveResult && saveResult.error) {
-      return { error: saveResult.error, recording: meta, warning: sr.warning || null };
-    }
-    return { success: true, recording: meta, warning: sr.warning || null };
+    if (STATE.mode === 'camera') return { error: 'Use the camera window to stop' };
+    return await stopTabScreen();
   }
 
-  case 'DOWNLOAD_RECORDING':
+  case 'DOWNLOAD_RECORDING': {
     var dr = msg.recording || {};
-    return await saveFile(msg.recordingId, dr.title || 'recording', dr.format || 'webm');
+    return await downloadRecording(msg.recordingId, dr.title || 'recording', dr.format || 'webm');
+  }
 
   case 'UPLOAD_TO_DRIVE': {
     var ur = msg.recording;
     if (!ur) return { error: 'No recording' };
-    var uf = ur.format || 'webm';
-    var um = { mp4: 'video/mp4', mp3: 'audio/mpeg', webm: 'video/webm' };
-    return await uploadToDrive(ur.id, ur.title + '.' + uf, um[uf] || 'video/webm');
+    var uf = ALLOWED_FORMATS.indexOf(ur.format) !== -1 ? ur.format : 'webm';
+    return await uploadToDrive(ur.id, (ur.title || 'recording') + '.' + uf, DRIVE_MIME[uf] || 'video/webm');
   }
 
   case 'GET_RECORDINGS':
@@ -558,14 +441,14 @@ async function handleMessage(msg) {
         bx.style.cssText = 'position:absolute;border:2px dashed #e85d04;background:rgba(232,93,4,0.06);display:none;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,0.35);';
         ov.appendChild(bx);
         var ht = document.createElement('div');
-        ht.textContent = 'Drag to select \u00b7 ESC to cancel';
+        ht.textContent = 'Drag to select · ESC to cancel';
         ht.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);font:13px/1 -apple-system,sans-serif;color:#fff;background:rgba(0,0,0,0.75);padding:8px 18px;border-radius:6px;z-index:2147483647;pointer-events:none;';
         ov.appendChild(ht);
-        var sx=0,sy=0,on=false;
-        ov.addEventListener('mousedown',function(e){sx=e.clientX;sy=e.clientY;on=true;bx.style.display='block';bx.style.left=sx+'px';bx.style.top=sy+'px';bx.style.width='0';bx.style.height='0';ht.style.display='none';e.preventDefault();});
-        ov.addEventListener('mousemove',function(e){if(!on)return;var x=Math.min(e.clientX,sx),y=Math.min(e.clientY,sy);bx.style.left=x+'px';bx.style.top=y+'px';bx.style.width=Math.abs(e.clientX-sx)+'px';bx.style.height=Math.abs(e.clientY-sy)+'px';});
-        ov.addEventListener('mouseup',function(e){if(!on)return;on=false;var r={x:Math.min(e.clientX,sx),y:Math.min(e.clientY,sy),w:Math.abs(e.clientX-sx),h:Math.abs(e.clientY-sy)};ov.remove();if(r.w>5&&r.h>5){setTimeout(function(){chrome.runtime.sendMessage({target:'background',type:'SCREENSHOT_AREA',rect:r,dpr:window.devicePixelRatio||1});},200);}});
-        document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){ov.remove();document.removeEventListener('keydown',esc);}});
+        var sx = 0, sy = 0, on = false;
+        ov.addEventListener('mousedown', function(e) { sx = e.clientX; sy = e.clientY; on = true; bx.style.display = 'block'; bx.style.left = sx + 'px'; bx.style.top = sy + 'px'; bx.style.width = '0'; bx.style.height = '0'; ht.style.display = 'none'; e.preventDefault(); });
+        ov.addEventListener('mousemove', function(e) { if (!on) return; var x = Math.min(e.clientX, sx), y = Math.min(e.clientY, sy); bx.style.left = x + 'px'; bx.style.top = y + 'px'; bx.style.width = Math.abs(e.clientX - sx) + 'px'; bx.style.height = Math.abs(e.clientY - sy) + 'px'; });
+        ov.addEventListener('mouseup', function(e) { if (!on) return; on = false; var r = { x: Math.min(e.clientX, sx), y: Math.min(e.clientY, sy), w: Math.abs(e.clientX - sx), h: Math.abs(e.clientY - sy) }; ov.remove(); if (r.w > 5 && r.h > 5) { setTimeout(function() { chrome.runtime.sendMessage({ target: 'background', type: 'SCREENSHOT_AREA', rect: r, dpr: window.devicePixelRatio || 1 }); }, 200); } });
+        document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { ov.remove(); document.removeEventListener('keydown', esc); } });
         document.body.appendChild(ov);
       }
     });
@@ -575,9 +458,11 @@ async function handleMessage(msg) {
   case 'SCREENSHOT_VISIBLE': {
     var vt = (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
     if (!vt) return { error: 'No tab' };
-    var vd = await chrome.tabs.captureVisibleTab(vt.windowId, { format: 'png' });
-    chrome.downloads.download({ url: vd, filename: 'Stash/Screenshot_' + Date.now() + '.png', saveAs: true });
-    return { success: true };
+    try {
+      var vd = await chrome.tabs.captureVisibleTab(vt.windowId, { format: 'png' });
+      await chrome.downloads.download({ url: vd, filename: 'Screenshot_' + Date.now() + '.png', saveAs: false });
+      return { success: true };
+    } catch (e) { return { error: e.message }; }
   }
 
   case 'SCREENSHOT_FULL': {
@@ -587,78 +472,107 @@ async function handleMessage(msg) {
       target: { tabId: ft.id },
       func: function() {
         return { sh: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight),
-                 vw: window.innerWidth, vh: window.innerHeight, sy: window.scrollY, dpr: window.devicePixelRatio || 1 };
+                 vw: window.innerWidth, vh: Math.max(window.innerHeight, 1), sy: window.scrollY, dpr: window.devicePixelRatio || 1 };
       }
     }))[0].result;
 
-    var chunks = [], pos = [];
-    for (var y = 0; y < dm.sh; y += dm.vh) pos.push(y);
-    for (var i = 0; i < pos.length; i++) {
-      await chrome.scripting.executeScript({ target: { tabId: ft.id }, func: function(s) { window.scrollTo(0, s); }, args: [pos[i]] });
-      await new Promise(function(r) { setTimeout(r, 500); });
-      chunks.push({ dataUrl: await chrome.tabs.captureVisibleTab(ft.windowId, { format: 'png' }), scrollY: pos[i] });
-    }
-    await chrome.scripting.executeScript({ target: { tabId: ft.id }, func: function(s) { window.scrollTo(0, s); }, args: [dm.sy] });
+    var chunks = [], positions = [];
+    for (var y = 0; y < dm.sh; y += dm.vh) positions.push(y);
 
-    if (chunks.length === 1) {
-      chrome.downloads.download({ url: chunks[0].dataUrl, filename: 'Stash/Screenshot_Full_' + Date.now() + '.png', saveAs: true });
-      return { success: true };
-    }
+    try {
+      for (var i = 0; i < positions.length; i++) {
+        await chrome.scripting.executeScript({ target: { tabId: ft.id }, func: function(s) { window.scrollTo(0, s); }, args: [positions[i]] });
+        await new Promise(function(r) { setTimeout(r, 450); });
+        var actualY = (await chrome.scripting.executeScript({ target: { tabId: ft.id }, func: function() { return window.scrollY; } }))[0].result;
+        chunks.push({ dataUrl: await chrome.tabs.captureVisibleTab(ft.windowId, { format: 'png' }), scrollY: actualY });
+      }
+      await chrome.scripting.executeScript({ target: { tabId: ft.id }, func: function(s) { window.scrollTo(0, s); }, args: [dm.sy] });
 
-    await ensureOffscreen();
-    var st2 = await sendToOffscreen({ target: 'offscreen', type: 'STITCH_SCREENSHOTS', chunks: chunks,
-      totalWidth: dm.vw * dm.dpr, totalHeight: dm.sh * dm.dpr, chunkHeight: dm.vh * dm.dpr });
-    if (st2 && st2.dataUrl) {
-      chrome.downloads.download({ url: st2.dataUrl, filename: 'Stash/Screenshot_Full_' + Date.now() + '.png', saveAs: true });
-      return { success: true };
-    }
-    return { error: 'Stitch failed' };
+      if (chunks.length === 1) {
+        await chrome.downloads.download({ url: chunks[0].dataUrl, filename: 'Screenshot_Full_' + Date.now() + '.png', saveAs: false });
+        return { success: true };
+      }
+      await ensureOffscreen();
+      var st2 = await sendToOffscreen({ type: 'STITCH_SCREENSHOTS', chunks: chunks,
+        totalWidth: dm.vw * dm.dpr, totalHeight: dm.sh * dm.dpr, dpr: dm.dpr });
+      if (st2 && st2.dataUrl) {
+        await chrome.downloads.download({ url: st2.dataUrl, filename: 'Screenshot_Full_' + Date.now() + '.png', saveAs: false });
+        return { success: true };
+      }
+      return { error: 'Stitch failed' };
+    } catch (e) { return { error: e.message }; }
   }
 
   case 'SCREENSHOT_AREA': {
     var at2 = (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
     if (!at2) return { error: 'No tab' };
-    var fc = await chrome.tabs.captureVisibleTab(at2.windowId, { format: 'png' });
-    await ensureOffscreen();
-    var cr = await sendToOffscreen({ target: 'offscreen', type: 'CROP_SCREENSHOT', dataUrl: fc,
-      x: Math.round(msg.rect.x * msg.dpr), y: Math.round(msg.rect.y * msg.dpr),
-      w: Math.round(msg.rect.w * msg.dpr), h: Math.round(msg.rect.h * msg.dpr) });
-    if (cr && cr.dataUrl) {
-      chrome.downloads.download({ url: cr.dataUrl, filename: 'Stash/Screenshot_Area_' + Date.now() + '.png', saveAs: true });
-      return { success: true };
-    }
-    return { error: 'Crop failed' };
+    var rect = msg.rect || {}, dpr = msg.dpr || 1;
+    if (typeof rect.x !== 'number' || typeof rect.y !== 'number' || typeof rect.w !== 'number' || typeof rect.h !== 'number' || rect.w <= 0 || rect.h <= 0)
+      return { error: 'Invalid selection' };
+    try {
+      var fc = await chrome.tabs.captureVisibleTab(at2.windowId, { format: 'png' });
+      await ensureOffscreen();
+      var cr = await sendToOffscreen({ type: 'CROP_SCREENSHOT', dataUrl: fc,
+        x: Math.round(rect.x * dpr), y: Math.round(rect.y * dpr), w: Math.round(rect.w * dpr), h: Math.round(rect.h * dpr) });
+      if (cr && cr.dataUrl) {
+        await chrome.downloads.download({ url: cr.dataUrl, filename: 'Screenshot_Area_' + Date.now() + '.png', saveAs: false });
+        return { success: true };
+      }
+      return { error: 'Crop failed' };
+    } catch (e) { return { error: e.message }; }
   }
 
   default: return {};
   }
 }
 
-/* ── Lifecycle ──────────────────────────────────────────────── */
+/* ── Lifecycle listeners ────────────────────────────────────── */
+
+// Camera window closed without a clean stop → reset state
+chrome.windows.onRemoved.addListener(function(windowId) {
+  if (STATE.cameraWindowId === windowId) { resetState(); broadcastState(); }
+});
 
 async function cleanupOldRecordings() {
-  var CUT = Date.now() - (3 * 86400000);
+  var CUT  = Date.now() - (3 * 86400000);
   var recs = await getRecordings();
-  var kept = recs.filter(function(r) {
-    if (r.timestamp && r.timestamp < CUT) {
-      sendToOffscreen({ target: 'offscreen', type: 'DELETE_BLOB', recordingId: r.id });
-      return false;
-    }
-    return true;
-  });
-  if (kept.length !== recs.length) await chrome.storage.local.set({ recordings: kept });
+  var stale = recs.filter(function(r) { return r.timestamp && r.timestamp < CUT; });
+  if (stale.length === 0) return;
+  try {
+    await ensureOffscreen();
+    for (var i = 0; i < stale.length; i++) await sendToOffscreen({ type: 'DELETE_BLOB', recordingId: stale[i].id });
+  } catch (e) {}
+  var kept = recs.filter(function(r) { return !(r.timestamp && r.timestamp < CUT); });
+  await chrome.storage.local.set({ recordings: kept });
 }
 
 chrome.runtime.onInstalled.addListener(async function() {
   await loadSettings();
   chrome.action.setBadgeText({ text: '' });
+  chrome.alarms.create('dailyCleanup', { periodInMinutes: 1440 });
 });
 
 chrome.runtime.onStartup.addListener(function() { cleanupOldRecordings(); });
 
+chrome.alarms.onAlarm.addListener(function(alarm) {
+  if (alarm.name === 'dailyCleanup') cleanupOldRecordings();
+  else if (alarm.name === 'recLimit') warnLongRecording();
+});
+
+chrome.notifications.onButtonClicked.addListener(function(id, btnIdx) {
+  if (id !== REC_LIMIT_NOTIF) return;
+  chrome.notifications.clear(REC_LIMIT_NOTIF);
+  if (btnIdx === 1) stopFromNotification();   // "Stop & Save"
+  // btnIdx 0 ("Keep Recording"): do nothing — the alarm re-fires in 10 min
+});
+
+chrome.notifications.onClicked.addListener(function(id) {
+  if (id === REC_LIMIT_NOTIF) chrome.notifications.clear(REC_LIMIT_NOTIF);
+});
+
 chrome.runtime.onConnect.addListener(function(port) {
   if (port.name === 'keepAlive') {
-    var iv = setInterval(function() { port.postMessage({ ping: 1 }); }, 25000);
+    var iv = setInterval(function() { try { port.postMessage({ ping: 1 }); } catch (e) {} }, 25000);
     port.onDisconnect.addListener(function() { clearInterval(iv); });
   }
 });

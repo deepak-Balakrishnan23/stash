@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap');
+
+:root {
+  --bg:#0d0d0b; --surface:#1c1c18; --border:#2e2e26; --border2:#3e3e34;
+  --text:#ededed; --text2:#aaa890; --text3:#706e58;
+  --accent:#e85d04; --green:#4a9c6d; --red:#d44333;
+  --mono:'DM Mono','SF Mono',monospace; --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden}
+button{font:inherit;cursor:pointer}
+
+#cam-app{display:flex;flex-direction:column;height:100vh;padding:16px 18px 18px;gap:12px}
+
+.cam-head{display:flex;align-items:center}
+.cam-brand{display:flex;align-items:center;gap:9px}
+.cam-mark{display:flex;filter:drop-shadow(0 4px 8px rgba(94,110,245,.4))}
+.cam-brand-name{font-size:15px;font-weight:700;letter-spacing:-.02em;color:var(--text)}
+.cam-brand-tag{font-size:11px;font-weight:600;color:var(--text3);padding:3px 9px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid var(--border)}
+
+.cam-stage{position:relative;flex:1;border-radius:16px;overflow:hidden;background:#000;border:1px solid var(--border);display:flex;align-items:center;justify-content:center}
+#cam-video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+
+.cam-badge{position:absolute;top:14px;left:14px;display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:20px;background:rgba(13,13,11,.7);backdrop-filter:blur(10px);font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--red)}
+.cam-badge.hidden{display:none}
+.cam-badge.paused{color:var(--accent)}
+.cam-dot{width:8px;height:8px;border-radius:50%;background:var(--red);animation:camblink 1s ease-in-out infinite}
+.cam-badge.paused .cam-dot{background:var(--accent);animation:none}
+@keyframes camblink{0%,100%{opacity:1}50%{opacity:.25}}
+
+.cam-close{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;border:1px solid var(--border2);background:rgba(13,13,11,.7);backdrop-filter:blur(10px);color:var(--text);font-size:15px;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.cam-close:hover{background:rgba(212,67,51,.2);border-color:var(--red);color:var(--red)}
+
+.cam-bar{display:flex;flex-direction:column;align-items:center;gap:12px}
+.cam-status{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--text2);min-height:16px;text-transform:uppercase}
+.cam-status.ready{color:var(--green)}
+.cam-status.rec{color:var(--red)}
+.cam-status.err{color:var(--red)}
+
+.cam-controls{display:flex;align-items:center;gap:18px}
+.cam-timer{font-family:var(--mono);font-size:20px;font-weight:300;min-width:64px;text-align:center}
+
+.cam-record{width:64px;height:64px;border-radius:50%;border:3px solid var(--border2);background:transparent;display:flex;align-items:center;justify-content:center;transition:all .25s}
+.cam-record:not(:disabled):hover{border-color:var(--accent);box-shadow:0 0 0 5px rgba(232,93,4,.12)}
+.cam-record:disabled{opacity:.35;cursor:not-allowed}
+.cam-record-dot{width:26px;height:26px;border-radius:50%;background:var(--accent);transition:all .25s}
+.cam-record.on{border-color:var(--red);animation:camring 1.6s ease-in-out infinite}
+.cam-record.on .cam-record-dot{width:20px;height:20px;border-radius:5px;background:var(--red)}
+@keyframes camring{0%,100%{box-shadow:0 0 0 0 rgba(212,67,51,0)}50%{box-shadow:0 0 0 6px rgba(212,67,51,.12)}}
+
+.cam-ctrl{width:46px;height:46px;border-radius:50%;border:1px solid var(--border2);background:var(--surface);color:var(--text2);display:flex;align-items:center;justify-content:center;transition:all .2s}
+.cam-ctrl:hover{background:var(--bg);color:var(--text);transform:scale(1.05)}
+.cam-ctrl.hidden{display:none}
