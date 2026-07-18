@@ -17,18 +17,22 @@ async function startRecording(settings, rid, streamId) {
     currentOutput      = stashPickMime(settings.outputFormat);
 
     var isTabCapture = !!streamId;
+    var dim = resDims(settings.resolution);
 
     // 1. Acquire the video stream
     if (isTabCapture) {
       displayStream = await navigator.mediaDevices.getUserMedia({
         audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } },
-        video: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId } }
+        // Tab capture is capped by the tab's own pixel size, but request the
+        // target ceiling so higher tiers (1440p/4K) aren't downscaled needlessly.
+        video: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: streamId,
+                 maxWidth: dim.w, maxHeight: dim.h, maxFrameRate: 30 } }
       });
     } else {
       displayStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          width:     { ideal: settings.resolution === '1080p' ? 1920 : 1280 },
-          height:    { ideal: settings.resolution === '1080p' ? 1080 : 720 },
+          width:     { ideal: dim.w },
+          height:    { ideal: dim.h },
           frameRate: { ideal: 30 }
         },
         audio: !!settings.includeSystemAudio
@@ -66,7 +70,7 @@ async function startRecording(settings, rid, streamId) {
     // 3. Record
     mediaRecorder = new MediaRecorder(mixedStream, {
       mimeType: currentOutput.mimeType,
-      videoBitsPerSecond: settings.resolution === '1080p' ? 8000000 : 4000000
+      videoBitsPerSecond: dim.bps
     });
 
     mediaRecorder.ondataavailable = async function(e) {
@@ -140,6 +144,18 @@ async function getBlobBase64(rid) {
   });
 }
 
+/* ── Resolution → capture dimensions + video bitrate ────────── */
+
+function resDims(r) {
+  switch (r) {
+    case '720p':  return { w: 1280, h: 720,  bps: 4000000 };
+    case '1440p': return { w: 2560, h: 1440, bps: 14000000 };
+    case '2160p': return { w: 3840, h: 2160, bps: 24000000 };
+    case '1080p':
+    default:      return { w: 1920, h: 1080, bps: 8000000 };
+  }
+}
+
 /* ── Image helpers ──────────────────────────────────────────── */
 
 function loadImage(url) {
@@ -149,6 +165,67 @@ function loadImage(url) {
     i.onerror = function() { no(new Error('Failed to load image')); };
     i.src = url;
   });
+}
+
+/* ── PDF export (high-quality single-image PDF) ─────────────── */
+
+function u8ToBase64(u8) {
+  var out = '', CH = 0x8000;
+  for (var i = 0; i < u8.length; i += CH) out += String.fromCharCode.apply(null, u8.subarray(i, i + CH));
+  return btoa(out);
+}
+
+/* Render a PNG dataUrl into a PDF, embedding the screenshot at full
+   resolution. Page is fit to A4 width so it opens/prints cleanly, but the
+   image stays full-res so zooming in stays sharp. Returns base64 PDF bytes. */
+async function buildPdf(dataUrl) {
+  var img = await loadImage(dataUrl);
+  var iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+
+  var c = document.getElementById('composite');
+  c.width = iw; c.height = ih;
+  var ctx = c.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, iw, ih); // flatten transparency on white
+  ctx.drawImage(img, 0, 0);
+  var jpegUrl = c.toDataURL('image/jpeg', 0.98);          // visually lossless, keeps size sane
+  c.width = 0; c.height = 0;
+
+  var b64 = jpegUrl.split(',')[1], bin = atob(b64), jpeg = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) jpeg[i] = bin.charCodeAt(i);
+
+  return { base64: pdfFromJpeg(jpeg, iw, ih) };
+}
+
+function pdfFromJpeg(jpeg, iw, ih) {
+  var pageW = 595.28;              // A4 width in points
+  var pageH = pageW * ih / iw;     // one tall page, aspect preserved
+  var enc = new TextEncoder();
+  var parts = [], offsets = [], length = 0;
+  function push(u8) { parts.push(u8); length += u8.length; }
+  function str(s)   { push(enc.encode(s)); }
+  function obj()    { offsets.push(length); }
+
+  str('%PDF-1.4\n');
+  obj(); str('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  obj(); str('2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n');
+  obj(); str('3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + pageW.toFixed(2) + ' ' + pageH.toFixed(2) +
+             '] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n');
+  obj(); str('4 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + iw + ' /Height ' + ih +
+             ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpeg.length + ' >>\nstream\n');
+  push(jpeg);
+  str('\nendstream\nendobj\n');
+  var content = 'q ' + pageW.toFixed(2) + ' 0 0 ' + pageH.toFixed(2) + ' 0 0 cm /Im0 Do Q\n';
+  obj(); str('5 0 obj\n<< /Length ' + content.length + ' >>\nstream\n' + content + 'endstream\nendobj\n');
+
+  var xrefAt = length;
+  var xref = 'xref\n0 6\n0000000000 65535 f \n';
+  for (var i = 0; i < offsets.length; i++) xref += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
+  str(xref);
+  str('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n' + xrefAt + '\n%%EOF');
+
+  var out = new Uint8Array(length), o = 0;
+  for (var j = 0; j < parts.length; j++) { out.set(parts[j], o); o += parts[j].length; }
+  return u8ToBase64(out);
 }
 
 /* ── Message Handler ────────────────────────────────────────── */
@@ -182,6 +259,11 @@ chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
 
     case 'GET_BLOB_DATA':
       sendResponse({ base64: await getBlobBase64(msg.recordingId) });
+      break;
+
+    case 'MAKE_PDF':
+      try { sendResponse(await buildPdf(msg.dataUrl)); }
+      catch (e) { sendResponse({ error: e.message }); }
       break;
 
     case 'DELETE_BLOB':

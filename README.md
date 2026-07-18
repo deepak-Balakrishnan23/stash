@@ -12,11 +12,11 @@ Stash is a Chrome extension for screen recording and screenshots — built priva
 ## Features
 
 - 🎥 **Screen recording** — capture your full screen, a specific tab, or your camera
-- 📸 **Screenshots** — instant capture with a single click
+- 📸 **Screenshots** — visible area, full page, or a selected region, saved as PNG or high-quality PDF
 - 🎙️ **Audio support** — record with microphone and/or system audio
 - 💾 **Local-first** — all recordings saved directly to your device
 - ☁️ **Optional Google Drive** — save to Drive if you want to, never required
-- ⚙️ **Configurable output** — choose resolution (up to 1080p) and format (WebM)
+- ⚙️ **Configurable output** — choose resolution (up to 4K / 2160p) and format (MP4 or WebM)
 - ⏸️ **Pause & resume** — full control over your recording session
 - 🔒 **Offline** — works entirely without an internet connection
 

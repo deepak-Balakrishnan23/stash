@@ -77,9 +77,10 @@ function closeAllDd() {
   document.querySelectorAll('.dd-open').forEach(function(f) { f.classList.remove('dd-open'); });
 }
 document.addEventListener('click', closeAllDd);
-ddToggle('#opt-format', '#dd-format');
-ddToggle('#opt-res',    '#dd-res');
-ddToggle('#opt-save',   '#dd-save');
+ddToggle('#opt-format',    '#dd-format');
+ddToggle('#opt-res',       '#dd-res');
+ddToggle('#opt-save',      '#dd-save');
+ddToggle('#opt-ss-format', '#dd-ss-format');
 
 function ddBind(ddId, lblId, key) {
   $(ddId).querySelectorAll('.dd-item').forEach(function(it) {
@@ -94,8 +95,9 @@ function ddBind(ddId, lblId, key) {
     };
   });
 }
-ddBind('#dd-format', '#lbl-format', 'outputFormat');
-ddBind('#dd-res',    '#lbl-res',    'resolution');
+ddBind('#dd-format',    '#lbl-format',    'outputFormat');
+ddBind('#dd-res',       '#lbl-res',       'resolution');
+ddBind('#dd-ss-format', '#lbl-ss-format', 'captureFormat');
 
 // Save destination — request the optional Drive permission lazily
 $('#dd-save').querySelectorAll('.dd-item').forEach(function(it) {
@@ -136,7 +138,7 @@ async function loadState() {
 
 function cleanSettings(source) {
   var clean = {};
-  ['captureMode', 'includeMic', 'includeSystemAudio', 'resolution', 'outputFormat', 'saveTo'].forEach(function(key) {
+  ['captureMode', 'includeMic', 'includeSystemAudio', 'resolution', 'outputFormat', 'saveTo', 'captureFormat'].forEach(function(key) {
     if (Object.prototype.hasOwnProperty.call(source, key)) clean[key] = source[key];
   });
   return clean;
@@ -152,12 +154,14 @@ function applyUI() {
   $('#opt-mic').setAttribute('aria-pressed', String(settings.includeMic !== false));
   $('#opt-audio').classList.toggle('off', settings.includeSystemAudio === false);
   $('#opt-audio').setAttribute('aria-pressed', String(settings.includeSystemAudio !== false));
-  $('#lbl-format').textContent = (settings.outputFormat || 'mp4').toUpperCase();
-  $('#lbl-res').textContent    = settings.resolution || '1080p';
-  $('#lbl-save').textContent   = settings.saveTo === 'cloud' ? 'Drive' : 'Local';
-  $('#dd-format').querySelectorAll('.dd-item').forEach(function(i) { i.classList.toggle('active', i.dataset.v === (settings.outputFormat || 'mp4')); });
-  $('#dd-res').querySelectorAll('.dd-item').forEach(function(i)    { i.classList.toggle('active', i.dataset.v === (settings.resolution   || '1080p')); });
-  $('#dd-save').querySelectorAll('.dd-item').forEach(function(i)   { i.classList.toggle('active', i.dataset.v === (settings.saveTo       || 'local')); });
+  $('#lbl-format').textContent    = (settings.outputFormat || 'mp4').toUpperCase();
+  $('#lbl-res').textContent       = settings.resolution || '1080p';
+  $('#lbl-save').textContent      = settings.saveTo === 'cloud' ? 'Drive' : 'Local';
+  $('#lbl-ss-format').textContent = (settings.captureFormat || 'png').toUpperCase();
+  $('#dd-format').querySelectorAll('.dd-item').forEach(function(i)    { i.classList.toggle('active', i.dataset.v === (settings.outputFormat  || 'mp4')); });
+  $('#dd-res').querySelectorAll('.dd-item').forEach(function(i)       { i.classList.toggle('active', i.dataset.v === (settings.resolution    || '1080p')); });
+  $('#dd-save').querySelectorAll('.dd-item').forEach(function(i)      { i.classList.toggle('active', i.dataset.v === (settings.saveTo        || 'local')); });
+  $('#dd-ss-format').querySelectorAll('.dd-item').forEach(function(i) { i.classList.toggle('active', i.dataset.v === (settings.captureFormat || 'png')); });
 }
 
 /* ── Timer ──────────────────────────────────────────────────── */

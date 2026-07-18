@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Stash Screen Recorder & Screenshot",
   "short_name": "Stash",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Record. Screenshot. Stash. A free, offline screen recorder that keeps everything on your device.",
   "icons": {
     "16": "icons/icon16.png",

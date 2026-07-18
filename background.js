@@ -19,7 +19,8 @@ var STATE = {
     includeSystemAudio: true,
     resolution: '1080p',
     outputFormat: 'mp4',   // MP4 is the default output
-    saveTo: 'local'
+    saveTo: 'local',
+    captureFormat: 'png'   // screenshot output: 'png' | 'pdf'
   }
 };
 
@@ -83,10 +84,11 @@ async function saveSettings(s) {
 function sanitizeSettings(s) {
   var next = {};
   if (!s || typeof s !== 'object') return next;
-  ['captureMode', 'includeMic', 'includeSystemAudio', 'resolution', 'outputFormat', 'saveTo'].forEach(function(key) {
+  ['captureMode', 'includeMic', 'includeSystemAudio', 'resolution', 'outputFormat', 'saveTo', 'captureFormat'].forEach(function(key) {
     if (Object.prototype.hasOwnProperty.call(s, key)) next[key] = s[key];
   });
   if (next.outputFormat && ALLOWED_FORMATS.indexOf(next.outputFormat) === -1) next.outputFormat = 'mp4';
+  if (next.captureFormat && next.captureFormat !== 'pdf') next.captureFormat = 'png';
   return next;
 }
 
@@ -137,11 +139,32 @@ async function downloadRecording(recordingId, title, format) {
   }
 }
 
+/* ── Screenshot delivery (PNG or high-quality PDF) ──────────── */
+//
+// Screenshots always start as a PNG dataUrl (visible/stitched/cropped). When
+// the user picks PDF, the offscreen document wraps that image in a real PDF.
+// Both save straight to Downloads, matching the app's no-prompt screenshot UX.
+
+async function deliverShot(pngDataUrl, baseName) {
+  if (STATE.settings.captureFormat === 'pdf') {
+    await ensureOffscreen();
+    var pdf = await sendToOffscreen({ type: 'MAKE_PDF', dataUrl: pngDataUrl });
+    if (!pdf || pdf.error || !pdf.base64) return { error: (pdf && pdf.error) || 'PDF export failed' };
+    await chrome.downloads.download({
+      url: 'data:application/pdf;base64,' + pdf.base64,
+      filename: baseName + '.pdf', saveAs: false
+    });
+    return { success: true };
+  }
+  await chrome.downloads.download({ url: pngDataUrl, filename: baseName + '.png', saveAs: false });
+  return { success: true };
+}
+
 /* ── Google Drive (optional) ────────────────────────────────── */
 
 async function getDriveToken() {
   var has = await new Promise(function(res) { chrome.permissions.contains({ permissions: ['identity'] }, res); });
-  if (!has) throw new Error('Google Drive not connected — enable it in Settings first.');
+  if (!has) throw new Error('Google Drive not connected. Enable it in Settings first.');
   return new Promise(function(resolve, reject) {
     chrome.identity.getAuthToken({ interactive: true }, function(tok) {
       if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
@@ -284,11 +307,11 @@ function broadcastState() {
 
 chrome.runtime.onMessage.addListener(function(msg, sender, sendResponse) {
   if (msg.target === 'offscreen') return false;
-  handleMessage(msg, sender).then(sendResponse).catch(function(e) { sendResponse({ error: e.message }); });
+  handleMessage(msg).then(sendResponse).catch(function(e) { sendResponse({ error: e.message }); });
   return true;
 });
 
-async function handleMessage(msg, sender) {
+async function handleMessage(msg) {
   switch (msg.type) {
 
   case 'GET_STATE':
@@ -456,16 +479,17 @@ async function handleMessage(msg, sender) {
   }
 
   case 'SCREENSHOT_VISIBLE': {
+    await loadSettings();
     var vt = (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
     if (!vt) return { error: 'No tab' };
     try {
       var vd = await chrome.tabs.captureVisibleTab(vt.windowId, { format: 'png' });
-      await chrome.downloads.download({ url: vd, filename: 'Screenshot_' + Date.now() + '.png', saveAs: false });
-      return { success: true };
+      return await deliverShot(vd, 'Screenshot_' + Date.now());
     } catch (e) { return { error: e.message }; }
   }
 
   case 'SCREENSHOT_FULL': {
+    await loadSettings();
     var ft = (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
     if (!ft) return { error: 'No tab' };
     var dm = (await chrome.scripting.executeScript({
@@ -489,21 +513,20 @@ async function handleMessage(msg, sender) {
       await chrome.scripting.executeScript({ target: { tabId: ft.id }, func: function(s) { window.scrollTo(0, s); }, args: [dm.sy] });
 
       if (chunks.length === 1) {
-        await chrome.downloads.download({ url: chunks[0].dataUrl, filename: 'Screenshot_Full_' + Date.now() + '.png', saveAs: false });
-        return { success: true };
+        return await deliverShot(chunks[0].dataUrl, 'Screenshot_Full_' + Date.now());
       }
       await ensureOffscreen();
       var st2 = await sendToOffscreen({ type: 'STITCH_SCREENSHOTS', chunks: chunks,
         totalWidth: dm.vw * dm.dpr, totalHeight: dm.sh * dm.dpr, dpr: dm.dpr });
       if (st2 && st2.dataUrl) {
-        await chrome.downloads.download({ url: st2.dataUrl, filename: 'Screenshot_Full_' + Date.now() + '.png', saveAs: false });
-        return { success: true };
+        return await deliverShot(st2.dataUrl, 'Screenshot_Full_' + Date.now());
       }
       return { error: 'Stitch failed' };
     } catch (e) { return { error: e.message }; }
   }
 
   case 'SCREENSHOT_AREA': {
+    await loadSettings();
     var at2 = (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
     if (!at2) return { error: 'No tab' };
     var rect = msg.rect || {}, dpr = msg.dpr || 1;
@@ -515,8 +538,7 @@ async function handleMessage(msg, sender) {
       var cr = await sendToOffscreen({ type: 'CROP_SCREENSHOT', dataUrl: fc,
         x: Math.round(rect.x * dpr), y: Math.round(rect.y * dpr), w: Math.round(rect.w * dpr), h: Math.round(rect.h * dpr) });
       if (cr && cr.dataUrl) {
-        await chrome.downloads.download({ url: cr.dataUrl, filename: 'Screenshot_Area_' + Date.now() + '.png', saveAs: false });
-        return { success: true };
+        return await deliverShot(cr.dataUrl, 'Screenshot_Area_' + Date.now());
       }
       return { error: 'Crop failed' };
     } catch (e) { return { error: e.message }; }

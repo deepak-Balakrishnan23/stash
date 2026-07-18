@@ -4,12 +4,15 @@
   --bg:#ECEDEF;
   --card:#FFFFFF;
   --ink:#0B0B0C;
-  --ink2:#6B7280;
-  --ink3:#9CA3AF;
+  --ink2:#5D6470;
+  --ink3:#6E727B;
   --line:rgba(17,17,17,.07);
   --line2:rgba(17,17,17,.12);
   --fill:#F4F5F7;
   --fill2:#EDEEF1;
+
+  --btn-bg:#0B0B0C; --btn-fg:#FFFFFF;   /* filled buttons + toast (flips in dark) */
+  color-scheme:light;
 
   --rec1:#E7EAFD; --rec2:#EFF1FE; --rec-ic1:#6E56F0; --rec-ic2:#5B6EF5; --rec-ring:#6E72F2;
   --snap1:#FBDCEA; --snap2:#FCE8F1; --snap-ic1:#F472B6; --snap-ic2:#EC4899; --snap-ring:#EC4899;
@@ -56,14 +59,19 @@ header{display:flex;align-items:center;justify-content:space-between;padding:4px
 
 /* ── Hero cards (tabs) ──────────────────────────────── */
 .hero{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
-.hero-card{position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;gap:3px;padding:22px 14px 16px;border-radius:20px;box-shadow:var(--sh-soft);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),opacity var(--dur) var(--ease);opacity:.62}
+.hero-card{position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;gap:3px;padding:22px 14px 16px;border-radius:20px;box-shadow:var(--sh-soft);transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),opacity var(--dur) var(--ease),filter var(--dur) var(--ease);opacity:.5;filter:saturate(.65)}
 .hero-card.rec{background:linear-gradient(160deg,var(--rec1),var(--rec2))}
 .hero-card.snap{background:linear-gradient(160deg,var(--snap1),var(--snap2))}
-.hero-card:hover{transform:translateY(-2px);opacity:.85}
-.hero-card.active{opacity:1;box-shadow:var(--sh-card)}
-.hero-card.rec.active{box-shadow:0 1px 2px rgba(94,110,245,.18),0 14px 30px rgba(94,110,245,.22)}
-.hero-card.snap.active{box-shadow:0 1px 2px rgba(236,72,153,.18),0 14px 30px rgba(236,72,153,.22)}
+.hero-card:hover{transform:translateY(-2px);opacity:.72}
+.hero-card.active{opacity:1;filter:none}
+/* Selected card gets a bold accent ring + a check badge, so the choice
+   reads instantly and isn't conveyed by opacity/color alone (a11y). */
+.hero-card.rec.active{box-shadow:inset 0 0 0 2px var(--rec-ring),0 1px 2px rgba(94,110,245,.2),0 16px 32px rgba(94,110,245,.3)}
+.hero-card.snap.active{box-shadow:inset 0 0 0 2px var(--snap-ring),0 1px 2px rgba(236,72,153,.2),0 16px 32px rgba(236,72,153,.3)}
 .hero-card:active{transform:scale(.98)}
+.hero-card.active::after{content:"✓";position:absolute;top:11px;right:11px;z-index:2;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:12px;font-weight:800;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.22)}
+.hero-card.rec.active::after{background:var(--rec-ring)}
+.hero-card.snap.active::after{background:var(--snap-ring)}
 
 .hero-glow{position:absolute;inset:0;background:radial-gradient(120% 80% at 50% -10%,rgba(255,255,255,.7),transparent 60%);pointer-events:none}
 .hero-corners{position:absolute;inset:14px;border-radius:12px;pointer-events:none;
@@ -161,7 +169,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:4px
 
 /* Primary action — Stop pill grows, Pause sits inline to its left */
 .action-zone{display:flex;align-items:center;gap:10px;margin-top:2px}
-.primary{flex:1;display:flex;align-items:center;justify-content:center;gap:10px;height:52px;border-radius:16px;background:var(--ink);color:#fff;font-size:14.5px;font-weight:600;letter-spacing:-.01em;box-shadow:var(--sh-btn);transition:transform var(--dur) var(--ease),background var(--dur) var(--ease)}
+.primary{flex:1;display:flex;align-items:center;justify-content:center;gap:10px;height:52px;border-radius:16px;background:var(--btn-bg);color:var(--btn-fg);font-size:14.5px;font-weight:600;letter-spacing:-.01em;box-shadow:var(--sh-btn);transition:transform var(--dur) var(--ease),background var(--dur) var(--ease)}
 .primary:hover{transform:translateY(-1px)}
 .primary:active{transform:translateY(0) scale(.99)}
 .primary-dot{width:12px;height:12px;border-radius:50%;background:#FF5A52}
@@ -233,11 +241,11 @@ header{display:flex;align-items:center;justify-content:space-between;padding:4px
 .set-lbl{font-size:10.5px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px}
 .set-div{height:1px;background:var(--line);margin:16px 0}
 .set-hint{font-size:12px;font-weight:500;color:var(--ink3);line-height:1.6;margin-top:10px}
-.text-btn{display:block;width:100%;padding:13px;border-radius:14px;background:var(--ink);color:#fff;font-size:13px;font-weight:600;box-shadow:var(--sh-btn);transition:transform var(--dur) var(--ease)}
+.text-btn{display:block;width:100%;padding:13px;border-radius:14px;background:var(--btn-bg);color:var(--btn-fg);font-size:13px;font-weight:600;box-shadow:var(--sh-btn);transition:transform var(--dur) var(--ease)}
 .text-btn:hover{transform:translateY(-1px)}
 
 /* Toast */
-.toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%) translateY(60px);max-width:320px;padding:11px 18px;border-radius:13px;background:var(--ink);color:#fff;font-size:12.5px;font-weight:600;box-shadow:var(--sh-btn);opacity:0;z-index:100;transition:all .3s var(--ease);pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%) translateY(60px);max-width:320px;padding:11px 18px;border-radius:13px;background:var(--btn-bg);color:var(--btn-fg);font-size:12.5px;font-weight:600;box-shadow:var(--sh-btn);opacity:0;z-index:100;transition:all .3s var(--ease);pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.ok{background:var(--green)}
 .toast.err{background:var(--red)}
@@ -245,6 +253,28 @@ header{display:flex;align-items:center;justify-content:space-between;padding:4px
 ::-webkit-scrollbar{width:6px}
 ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:3px}
 ::-webkit-scrollbar-track{background:transparent}
+
+/* ── System dark mode ───────────────────────────────────────── */
+/* Everything themes off these variables, so the whole popup flips by
+   overriding the palette. Buttons/toast use --btn-* to invert cleanly. */
+@media (prefers-color-scheme: dark){
+  :root{
+    color-scheme:dark;
+    --bg:#0E0F12; --card:#191B1F; --ink:#F2F3F5; --ink2:#AEB4BF; --ink3:#8B909B;
+    --line:rgba(255,255,255,.09); --line2:rgba(255,255,255,.17);
+    --fill:#212429; --fill2:#292D33;
+    --btn-bg:#F2F3F5; --btn-fg:#0E0F12;
+    --rec1:#232741; --rec2:#1B1E33; --snap1:#3B2130; --snap2:#2B1823;
+    --sh-card:0 1px 2px rgba(0,0,0,.45),0 12px 32px rgba(0,0,0,.5);
+    --sh-soft:0 1px 2px rgba(0,0,0,.4),0 6px 16px rgba(0,0,0,.42);
+    --sh-btn:0 1px 2px rgba(0,0,0,.5),0 10px 24px rgba(0,0,0,.55);
+  }
+  /* Recording pills are pale red/amber in light — darken for contrast */
+  .rec-status{background:linear-gradient(160deg,#2A1416,#231315)}
+  .rec-status.paused{background:linear-gradient(160deg,#2A1E12,#231A12)}
+  .primary.on{background:#2A2D33}
+  .hero-glow{opacity:.5}
+}
 
 /* Respect users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce){
